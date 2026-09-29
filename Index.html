@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Skyfall Arena — Flight Combat</title>
+<style>
+  :root{
+    --panel-bg: rgba(10,14,20,0.55);
+    --panel-border: rgba(255,255,255,0.15);
+    --text: #eaf2ff;
+    --accent: #4fc3f7;
+    --danger: #ff5252;
+    --ok: #69f0ae;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-sizing: border-box;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){ --text:#0b1220; }
+  }
+  html,body{ height:100%; margin:0; overflow:hidden; background:#87ceeb; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #container{ position:fixed; inset:0; }
+  canvas{ display:block; width:100%; height:100%; touch-action:none; }
+
+  .hud{ position:fixed; color:var(--text); pointer-events:none; text-shadow:0 1px 3px rgba(0,0,0,0.6); z-index:5; }
+  #topbar{ top: calc(12px + env(safe-area-inset-top,0px)); left:12px; right:12px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .stat{ background:var(--panel-bg); border:1px solid var(--panel-border); border-radius:10px; padding:6px 12px; font-size:13px; backdrop-filter: blur(6px); }
+  .stat b{ font-size:15px; }
+  #hpwrap{ width:160px; height:10px; background:rgba(255,255,255,0.15); border-radius:6px; overflow:hidden; margin-top:4px; }
+  #hpbar{ height:100%; width:100%; background:linear-gradient(90deg,#ff5252,#ffca28,#69f0ae); transition:width .15s; }
+  #crosshair{ position:fixed; top:50%; left:50%; width:22px; height:22px; margin:-11px 0 0 -11px; z-index:5; pointer-events:none; }
+  #crosshair::before, #crosshair::after{ content:""; position:absolute; background:rgba(255,255,255,0.85); }
+  #crosshair::before{ left:50%; top:0; width:2px; height:100%; margin-left:-1px; }
+  #crosshair::after{ top:50%; left:0; height:2px; width:100%; margin-top:-1px; }
+
+  #bottombar{ bottom: calc(12px + env(safe-area-inset-bottom,0px)); left:12px; }
+  #compassbar{ bottom: calc(12px + env(safe-area-inset-bottom,0px)); right:12px; text-align:right; }
+
+  #overlay{ position:fixed; inset:0; background:rgba(6,10,16,0.82); color:#fff; display:flex; align-items:center; justify-content:center; z-index:20; text-align:center; padding:20px; }
+  #overlay .card{ max-width:480px; }
+  #overlay h1{ margin:0 0 6px; font-size:28px; }
+  #overlay p{ opacity:0.85; line-height:1.5; font-size:14px; }
+  #overlay .keys{ display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; text-align:left; font-size:13px; margin:16px 0; background:rgba(255,255,255,0.06); padding:14px 18px; border-radius:12px; }
+  #overlay .keys span:nth-child(odd){ color:var(--accent); font-weight:600; }
+  #startBtn{ background:var(--accent); border:none; color:#04202b; font-weight:700; font-size:16px; padding:12px 30px; border-radius:999px; cursor:pointer; }
+  #startBtn:active{ transform:scale(0.97); }
+
+  #msgCenter{ position:fixed; top:40%; left:50%; transform:translate(-50%,-50%); z-index:15; color:#fff; font-size:22px; font-weight:700; text-shadow:0 2px 8px rgba(0,0,0,0.7); pointer-events:none; opacity:0; transition:opacity .3s; text-align:center; }
+  #hitFlash{ position:fixed; inset:0; z-index:10; pointer-events:none; background:radial-gradient(circle, rgba(255,0,0,0) 55%, rgba(255,0,0,0.45) 100%); opacity:0; transition:opacity .08s; }
+  #killfeed{ position:fixed; top: calc(70px + env(safe-area-inset-top,0px)); right:12px; z-index:5; display:flex; flex-direction:column; align-items:flex-end; gap:4px; pointer-events:none; }
+  #killfeed .entry{ background:var(--panel-bg); border:1px solid var(--panel-border); border-radius:8px; padding:4px 10px; font-size:12px; color:var(--text); text-shadow:0 1px 3px rgba(0,0,0,0.6); opacity:1; transition:opacity .6s; }
+
+  #touchControls{ display:none; }
+  body.touch #touchControls{ display:block; }
+  body.touch #bottombar, body.touch #compassbar{ display:none; }
+  .joy-base{ position:fixed; bottom: calc(26px + env(safe-area-inset-bottom,0px)); width:130px; height:130px; border-radius:50%; background:rgba(255,255,255,0.10); border:2px solid rgba(255,255,255,0.35); z-index:8; touch-action:none; }
+  .joy-knob{ position:absolute; top:50%; left:50%; width:56px; height:56px; margin:-28px 0 0 -28px; border-radius:50%; background:rgba(255,255,255,0.55); border:2px solid rgba(255,255,255,0.8); transform:translate(-50%,-50%); pointer-events:none; }
+  #joyLeft{ left:22px; }
+  #joyRight{ right:22px; }
+  #fireBtn{ position:fixed; right:36px; bottom: calc(178px + env(safe-area-inset-bottom,0px)); width:76px; height:76px; border-radius:50%; background:rgba(255,82,82,0.35); border:2px solid rgba(255,82,82,0.8); color:#fff; font-weight:700; font-size:13px; z-index:8; touch-action:none; display:flex; align-items:center; justify-content:center; text-shadow:0 1px 3px rgba(0,0,0,0.6); }
+  #fireBtn.active{ background:rgba(255,82,82,0.6); }
+</style>
+</head>
+<body>
+<div id="container"></div>
+<div id="crosshair"></div>
+
+<div class="hud" id="topbar">
+  <div class="stat">Score<br><b id="score">0</b></div>
+  <div class="stat">Kills<br><b id="kills">0</b></div>
+  <div class="stat">Planes Alive<br><b id="alive">70 / 70</b></div>
+  <div class="stat" style="min-width:170px;">Health
+    <div id="hpwrap"><div id="hpbar"></div></div>
+  </div>
+</div>
+
+<div class="hud" id="bottombar">
+  <div class="stat">Altitude: <b id="alt">0</b> m &nbsp;|&nbsp; Speed: <b id="spd">0</b></div>
+</div>
+<div class="hud" id="compassbar">
+  <div class="stat">Throttle<br><b id="throt">0%</b></div>
+</div>
+
+<div id="msgCenter"></div>
+<div id="hitFlash"></div>
+<div id="killfeed"></div>
+
+<div id="touchControls">
+  <div class="joy-base" id="joyLeft"><div class="joy-knob" id="joyLeftKnob"></div></div>
+  <div class="joy-base" id="joyRight"><div class="joy-knob" id="joyRightKnob"></div></div>
+  <div id="fireBtn">FIRE</div>
+</div>
+
+<div id="overlay">
+  <div class="card">
+    <h1>✈️ Skyfall Arena</h1>
+    <p>A 70-plane dogfight. You're one pilot — the other 69 are flown by AI so the skies are always full.</p>
+    <div class="keys" id="desktopKeys">
+      <span>W / S</span><span>Pitch nose up / down</span>
+      <span>A / D</span><span>Roll left / right</span>
+      <span>◀ / ▶</span><span>Yaw (rudder) left / right</span>
+      <span>▲ / ▼</span><span>Throttle up / down</span>
+      <span>Space</span><span>Fire guns</span>
+    </div>
+    <div class="keys" id="touchKeys" style="display:none;">
+      <span>Left stick</span><span>Pitch &amp; roll</span>
+      <span>Right stick</span><span>Yaw &amp; throttle</span>
+      <span>FIRE button</span><span>Fire guns</span>
+    </div>
+    <button id="startBtn">Take Off</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+// ---------- basic setup ----------
+const container = document.getElementById('container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 700, 3600);
+
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.5, 6000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+container.appendChild(renderer.domElement);
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+sun.position.set(400,800,200);
+scene.add(sun);
+
+// ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(9000,9000,1,1),
+  new THREE.MeshLambertMaterial({color:0x2f6b3c})
+);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+const water = new THREE.Mesh(
+  new THREE.PlaneGeometry(9000,9000,1,1),
+  new THREE.MeshLambertMaterial({color:0x1c6fa8})
+);
+water.rotation.x = -Math.PI/2; water.position.y = -1;
+scene.add(water);
+
+// scattered "islands" for visual reference
+for(let i=0;i<40;i++){
+  const s = 30+Math.random()*70;
+  const isl = new THREE.Mesh(new THREE.ConeGeometry(s, s*0.7, 6), new THREE.MeshLambertMaterial({color:0x3d7a41}));
+  isl.position.set((Math.random()-0.5)*6000,-5,(Math.random()-0.5)*6000);
+  scene.add(isl);
+}
+
+// clouds
+for(let i=0;i<60;i++){
+  const c = new THREE.Mesh(new THREE.SphereGeometry(20+Math.random()*40,6,6), new THREE.MeshLambertMaterial({color:0xffffff, transparent:true, opacity:0.75}));
+  c.position.set((Math.random()-0.5)*5000, 200+Math.random()*500, (Math.random()-0.5)*5000);
+  c.scale.y = 0.4;
+  scene.add(c);
+}
+
+// ---------- plane factory ----------
+function createPlaneMesh(color){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({color});
+  const darkMat = new THREE.MeshLambertMaterial({color:0x222222});
+
+  const fuselage = new THREE.Mesh(new THREE.ConeGeometry(1.1,6,7), mat);
+  fuselage.rotation.x = -Math.PI/2;
+  g.add(fuselage);
+
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(9,0.25,2), mat);
+  wing.position.z = 0.3;
+  g.add(wing);
+
+  const tailWing = new THREE.Mesh(new THREE.BoxGeometry(3.4,0.2,1.1), mat);
+  tailWing.position.set(0,0,2.6);
+  g.add(tailWing);
+
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.2,1.3,1.1), mat);
+  fin.position.set(0,0.7,2.6);
+  g.add(fin);
+
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.5,6,6), darkMat);
+  nose.position.z = -3;
+  g.add(nose);
+
+  return g;
+}
+
+// ---------- world constants ----------
+const TOTAL_PLANES = 70;
+const AI_TARGET = TOTAL_PLANES - 1;
+const BOUND = 3200;
+const ALT_MIN = 25, ALT_MAX = 950;
+
+// ---------- player ----------
+const player = createPlaneMesh(0x3388ff);
+player.position.set(0,300,0);
+player.userData = {hp:100, maxHp:100, alive:true, speed:70};
+scene.add(player);
+
+// ---------- AI ----------
+const aiPlanes = [];
+function randomPoint(){
+  return new THREE.Vector3(
+    (Math.random()-0.5)*BOUND*1.8,
+    ALT_MIN + Math.random()*(ALT_MAX-ALT_MIN),
+    (Math.random()-0.5)*BOUND*1.8
+  );
+}
+const AI_COLORS = [0xd84343,0xe0793a,0xb84fd8,0xd8c23a];
+function spawnAI(){
+  const plane = createPlaneMesh(AI_COLORS[Math.floor(Math.random()*AI_COLORS.length)]);
+  const pos = randomPoint();
+  pos.y = Math.max(pos.y, 150);
+  plane.position.copy(pos);
+  plane.userData = {
+    hp: 40, maxHp: 40, alive:true,
+    speed: 40+Math.random()*30,
+    waypoint: randomPoint(),
+    fireCooldown: 1+Math.random()*3,
+    isAI:true
+  };
+  scene.add(plane);
+  aiPlanes.push(plane);
+}
+for(let i=0;i<AI_TARGET;i++) spawnAI();
+
+function scheduleRespawn(delay){
+  setTimeout(()=>{
+    if(aiPlanes.length < AI_TARGET) spawnAI();
+  }, delay*1000);
+}
+
+// ---------- bullets ----------
+const bullets = [];
+const bulletGeo = new THREE.CylinderGeometry(0.25,0.25,3,5);
+bulletGeo.rotateX(Math.PI/2);
+const bulletMatPlayer = new THREE.MeshBasicMaterial({color:0xfff176});
+const bulletMatAI = new THREE.MeshBasicMaterial({color:0xff5252});
+
+function fireBullet(fromPlane, isPlayerBullet, leadTarget){
+  const forward = new THREE.Vector3(0,0,-1).applyQuaternion(fromPlane.quaternion);
+  let dir = forward.clone();
+  if(leadTarget){
+    dir = leadTarget.clone().sub(fromPlane.position).normalize();
+    // slight inaccuracy for AI
+    dir.x += (Math.random()-0.5)*0.05;
+    dir.y += (Math.random()-0.5)*0.05;
+    dir.z += (Math.random()-0.5)*0.05;
+    dir.normalize();
+  }
+  const mesh = new THREE.Mesh(bulletGeo, isPlayerBullet?bulletMatPlayer:bulletMatAI);
+  mesh.position.copy(fromPlane.position).add(dir.clone().multiplyScalar(6));
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,-1), dir);
+  scene.add(mesh);
+  bullets.push({
+    mesh, dir,
+    speed: isPlayerBullet?420:300,
+    life: 3,
+    owner: fromPlane,
+    isPlayerBullet
+  });
+}
+
+// ---------- explosions ----------
+const explosions = [];
+function explode(position){
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1,8,8), new THREE.MeshBasicMaterial({color:0xffa726, transparent:true, opacity:0.9}));
+  mesh.position.copy(position);
+  scene.add(mesh);
+  explosions.push({mesh, life:0.6, maxLife:0.6});
+}
+
+// ---------- input ----------
+const keys = {};
+window.addEventListener('keydown', e=>{ keys[e.code]=true; if(e.code==='Space') e.preventDefault(); });
+window.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+const touch = {pitch:0, roll:0, yaw:0, throttle:0, firing:false};
+if(isTouchDevice){
+  document.body.classList.add('touch');
+  document.getElementById('desktopKeys').style.display = 'none';
+  document.getElementById('touchKeys').style.display = 'grid';
+}
+
+function setupJoystick(baseEl, knobEl, onMove, onEnd){
+  let touchId = null;
+  function updateKnob(t){
+    const rect = baseEl.getBoundingClientRect();
+    const cx = rect.left+rect.width/2, cy = rect.top+rect.height/2;
+    const maxR = rect.width/2;
+    let dx = t.clientX-cx, dy = t.clientY-cy;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    if(dist>maxR){ dx = dx/dist*maxR; dy = dy/dist*maxR; }
+    knobEl.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    onMove(dx/maxR, dy/maxR);
+  }
+  baseEl.addEventListener('touchstart', e=>{
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    touchId = t.identifier;
+    updateKnob(t);
+  }, {passive:false});
+  window.addEventListener('touchmove', e=>{
+    for(const t of e.changedTouches){
+      if(t.identifier===touchId){ e.preventDefault(); updateKnob(t); }
+    }
+  }, {passive:false});
+  function release(e){
+    for(const t of e.changedTouches){
+      if(t.identifier===touchId){
+        touchId = null;
+        knobEl.style.transform = 'translate(-50%,-50%)';
+        onEnd();
+      }
+    }
+  }
+  window.addEventListener('touchend', release);
+  window.addEventListener('touchcancel', release);
+}
+
+if(isTouchDevice){
+  setupJoystick(
+    document.getElementById('joyLeft'), document.getElementById('joyLeftKnob'),
+    (nx,ny)=>{ touch.roll = nx; touch.pitch = -ny; },
+    ()=>{ touch.roll = 0; touch.pitch = 0; }
+  );
+  setupJoystick(
+    document.getElementById('joyRight'), document.getElementById('joyRightKnob'),
+    (nx,ny)=>{ touch.yaw = -nx; touch.throttle = -ny; },
+    ()=>{ touch.yaw = 0; touch.throttle = 0; }
+  );
+  const fireBtn = document.getElementById('fireBtn');
+  fireBtn.addEventListener('touchstart', e=>{ e.preventDefault(); touch.firing = true; fireBtn.classList.add('active'); }, {passive:false});
+  const stopFire = e=>{ e.preventDefault(); touch.firing = false; fireBtn.classList.remove('active'); };
+  fireBtn.addEventListener('touchend', stopFire);
+  fireBtn.addEventListener('touchcancel', stopFire);
+}
+
+let started = false;
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  started = true;
+  document.getElementById('overlay').style.display='none';
+});
+
+// ---------- messages ----------
+function showMessage(text, duration){
+  const el = document.getElementById('msgCenter');
+  el.textContent = text;
+  el.style.opacity = 1;
+  setTimeout(()=>{ el.style.opacity = 0; }, duration||1800);
+}
+
+function addKillFeed(text){
+  const feed = document.getElementById('killfeed');
+  const entry = document.createElement('div');
+  entry.className = 'entry';
+  entry.textContent = text;
+  feed.appendChild(entry);
+  while(feed.children.length > 5) feed.removeChild(feed.firstChild);
+  setTimeout(()=>{ entry.style.opacity = 0; }, 2600);
+  setTimeout(()=>{ if(entry.parentNode) entry.parentNode.removeChild(entry); }, 3200);
+}
+
+let flashTimeout = null;
+function flashHit(){
+  const el = document.getElementById('hitFlash');
+  el.style.opacity = 1;
+  clearTimeout(flashTimeout);
+  flashTimeout = setTimeout(()=>{ el.style.opacity = 0; }, 120);
+}
+
+// ---------- game state ----------
+let score = 0, kills = 0;
+let fireCooldownPlayer = 0;
+const PITCH_RATE = 1.3, ROLL_RATE = 2.4, YAW_RATE = 0.9;
+const MIN_SPEED = 20, MAX_SPEED = 160, ACCEL = 40;
+
+function clampAltitudeBounce(plane){
+  const p = plane.position;
+  if(p.y < ALT_MIN) p.y = ALT_MIN;
+  if(p.y > ALT_MAX) p.y = ALT_MAX;
+  const r = BOUND*1.9;
+  if(Math.abs(p.x) > r) p.x = Math.sign(p.x)*r;
+  if(Math.abs(p.z) > r) p.z = Math.sign(p.z)*r;
+}
+
+function updatePlayer(dt){
+  if(!player.userData.alive) return;
+  const pitchInput = THREE.MathUtils.clamp((keys['KeyW']?1:0) - (keys['KeyS']?1:0) + touch.pitch, -1, 1);
+  const rollInput = THREE.MathUtils.clamp((keys['KeyD']?1:0) - (keys['KeyA']?1:0) + touch.roll, -1, 1);
+  const yawInput = THREE.MathUtils.clamp((keys['ArrowLeft']?1:0) - (keys['ArrowRight']?1:0) + touch.yaw, -1, 1);
+
+  if(keys['ArrowUp']) player.userData.speed += ACCEL*dt;
+  if(keys['ArrowDown']) player.userData.speed -= ACCEL*dt;
+  if(touch.throttle) player.userData.speed += ACCEL*dt*touch.throttle;
+  player.userData.speed = Math.max(MIN_SPEED, Math.min(MAX_SPEED, player.userData.speed));
+
+  player.rotateX(pitchInput*PITCH_RATE*dt);
+  player.rotateY(yawInput*YAW_RATE*dt);
+  player.rotateZ(-rollInput*ROLL_RATE*dt);
+  player.translateZ(-player.userData.speed*dt);
+  clampAltitudeBounce(player);
+
+  fireCooldownPlayer -= dt;
+  if((keys['Space'] || touch.firing) && fireCooldownPlayer<=0){
+    fireBullet(player, true, null);
+    fireCooldownPlayer = 0.12;
+  }
+}
+
+function updateAI(plane, dt){
+  const ud = plane.userData;
+  if(!ud.alive) return;
+
+  if(!ud.waypoint || plane.position.distanceTo(ud.waypoint) < 90){
+    // occasionally attack player if close
+    if(player.userData.alive && plane.position.distanceTo(player.position) < 700 && Math.random()<0.35){
+      ud.waypoint = player.position.clone();
+    } else {
+      ud.waypoint = randomPoint();
+    }
+  }
+
+  const localTarget = plane.worldToLocal(ud.waypoint.clone());
+  const yawSteer = THREE.MathUtils.clamp(localTarget.x*0.04, -1, 1);
+  let pitchSteer = THREE.MathUtils.clamp(localTarget.y*0.04, -1, 1);
+
+  // pull up hard if getting close to the ground, overriding normal steering
+  if(plane.position.y < 100){
+    pitchSteer = Math.max(pitchSteer, 0.6);
+  }
+
+  plane.rotateX(pitchSteer*PITCH_RATE*0.7*dt);
+  plane.rotateY(-yawSteer*YAW_RATE*0.8*dt);
+  plane.rotateZ(-(-yawSteer)*ROLL_RATE*0.5*dt);
+  plane.translateZ(-ud.speed*dt);
+  clampAltitudeBounce(plane);
+
+  ud.fireCooldown -= dt;
+  if(ud.fireCooldown<=0 && player.userData.alive){
+    const toPlayer = player.position.clone().sub(plane.position);
+    const dist = toPlayer.length();
+    if(dist < 500){
+      const forward = new THREE.Vector3(0,0,-1).applyQuaternion(plane.quaternion).normalize();
+      const dot = forward.dot(toPlayer.clone().normalize());
+      if(dot > 0.86){
+        fireBullet(plane, false, player.position);
+        ud.fireCooldown = 1.4+Math.random()*1.4;
+      } else {
+        ud.fireCooldown = 0.3;
+      }
+    } else {
+      ud.fireCooldown = 0.5+Math.random()*0.5;
+    }
+  }
+}
+
+function updateBullets(dt){
+  for(let i=bullets.length-1;i>=0;i--){
+    const b = bullets[i];
+    b.mesh.position.add(b.dir.clone().multiplyScalar(b.speed*dt));
+    b.life -= dt;
+    let hit = false;
+
+    if(b.isPlayerBullet){
+      for(let j=aiPlanes.length-1;j>=0;j--){
+        const ai = aiPlanes[j];
+        if(!ai.userData.alive) continue;
+        if(b.mesh.position.distanceTo(ai.position) < 6){
+          ai.userData.hp -= 20;
+          hit = true;
+          if(ai.userData.hp <= 0){
+            ai.userData.alive = false;
+            explode(ai.position);
+            scene.remove(ai);
+            aiPlanes.splice(j,1);
+            kills++; score += 100;
+            scheduleRespawn(2+Math.random()*3);
+            addKillFeed('You shot down a bogey! +100');
+          }
+          break;
+        }
+      }
+    } else {
+      if(player.userData.alive && b.mesh.position.distanceTo(player.position) < 6){
+        player.userData.hp -= 8;
+        hit = true;
+        flashHit();
+        if(player.userData.hp <= 0){
+          killPlayer();
+        }
+      }
+    }
+
+    if(hit || b.life<=0){
+      scene.remove(b.mesh);
+      bullets.splice(i,1);
+    }
+  }
+}
+
+function updateCollisions(){
+  if(!player.userData.alive) return;
+  for(let j=aiPlanes.length-1;j>=0;j--){
+    const ai = aiPlanes[j];
+    if(!ai.userData.alive) continue;
+    if(player.position.distanceTo(ai.position) < 7){
+      // mid-air collision destroys both
+      ai.userData.alive = false;
+      explode(ai.position);
+      scene.remove(ai);
+      aiPlanes.splice(j,1);
+      scheduleRespawn(2+Math.random()*3);
+      addKillFeed('Mid-air collision with a bogey!');
+
+      player.userData.hp -= 45;
+      flashHit();
+      if(player.userData.hp <= 0){
+        killPlayer();
+      }
+      break;
+    }
+  }
+}
+
+function killPlayer(){
+  player.userData.alive = false;
+  explode(player.position);
+  player.visible = false;
+  showMessage('You were shot down! Respawning...', 2400);
+  setTimeout(()=>{
+    player.userData.hp = player.userData.maxHp;
+    player.userData.alive = true;
+    player.position.set((Math.random()-0.5)*400, 350, (Math.random()-0.5)*400);
+    player.rotation.set(0,0,0);
+    player.userData.speed = 60;
+    player.visible = true;
+  }, 2500);
+}
+
+function updateExplosions(dt){
+  for(let i=explosions.length-1;i>=0;i--){
+    const ex = explosions[i];
+    ex.life -= dt;
+    const t = 1 - ex.life/ex.maxLife;
+    ex.mesh.scale.setScalar(1+t*18);
+    ex.mesh.material.opacity = 0.9*(1-t);
+    if(ex.life<=0){ scene.remove(ex.mesh); explosions.splice(i,1); }
+  }
+}
+
+function updateCamera(dt){
+  const offset = new THREE.Vector3(0,5,16).applyMatrix4(new THREE.Matrix4().extractRotation(player.matrixWorld));
+  const desired = player.position.clone().add(offset);
+  camera.position.lerp(desired, Math.min(1, dt*4));
+  const lookAt = player.position.clone().add(new THREE.Vector3(0,1,0));
+  camera.lookAt(lookAt);
+}
+
+// ---------- HUD ----------
+const elScore = document.getElementById('score');
+const elKills = document.getElementById('kills');
+const elAlive = document.getElementById('alive');
+const elHp = document.getElementById('hpbar');
+const elAlt = document.getElementById('alt');
+const elSpd = document.getElementById('spd');
+const elThrot = document.getElementById('throt');
+
+function updateHUD(){
+  elScore.textContent = score;
+  elKills.textContent = kills;
+  elAlive.textContent = (aiPlanes.filter(a=>a.userData.alive).length + (player.userData.alive?1:0)) + ' / ' + TOTAL_PLANES;
+  const hpPct = Math.max(0, player.userData.hp/player.userData.maxHp*100);
+  elHp.style.width = hpPct + '%';
+  elAlt.textContent = Math.round(player.position.y);
+  elSpd.textContent = Math.round(player.userData.speed);
+  elThrot.textContent = Math.round((player.userData.speed-MIN_SPEED)/(MAX_SPEED-MIN_SPEED)*100)+'%';
+}
+
+// ---------- main loop ----------
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  if(started){
+    updatePlayer(dt);
+    for(const ai of aiPlanes) updateAI(ai, dt);
+    updateBullets(dt);
+    updateCollisions();
+    updateExplosions(dt);
+    updateCamera(dt);
+    updateHUD();
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+})();
+</script>
+</body>
+</html>
